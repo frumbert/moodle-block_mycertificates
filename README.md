@@ -2,7 +2,13 @@
 
 # Moodle My Certificates block repository
 
-This plugin displays the user's issued certificates. Currently displaying certificates from [Simple Certificate](https://moodle.org/plugins/mod_simplecertificate) and [Custom Certificate](https://moodle.org/plugins/mod_customcert) modules. 
+This plugin displays the user's issued certificates. Currently displaying certificates from [Simple Certificate](https://moodle.org/plugins/mod_simplecertificate) and [Custom Certificate](https://moodle.org/plugins/mod_customcert) modules.
+
+## this fork
+
+- support for the ancient [mod_certificate](https://moodle.org/plugins/mod_certificate) module, 
+- exposing a different listing layout when used on /my/courses.php
+- checks courses are still visible
  
 ### Installation
 
