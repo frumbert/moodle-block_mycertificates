@@ -65,8 +65,9 @@ class certificates {
         $simplecertificate = $this->get_from_simplecertificate();
         $customcert = $this->get_from_customcert();
         $coursecertificate = $this->get_from_coursecertificate();
+        $modcert = $this->get_from_modcert();
 
-        $allcerts = array_merge($simplecertificate, $customcert, $coursecertificate);
+        $allcerts = array_merge($simplecertificate, $customcert, $coursecertificate, $modcert);
 
         if (!empty($allcerts)) {
             return array_values($this->group_certificates_by_course($allcerts));
@@ -139,6 +140,67 @@ class certificates {
         return $returndata;
     }
 
+
+    /**
+     * Get issued certificates from ancient certificate module.
+     *
+     * @return array
+     *
+     * @throws \dml_exception
+     * @throws \moodle_exception
+     */
+    public function get_from_modcert() {
+        global $DB;
+
+        $certificate = \core_plugin_manager::instance()->get_plugin_info('mod_certificate');
+
+        if (is_null($certificate)) {
+            return [];
+        }
+
+        $sql = "SELECT
+                  ci.certificateid,
+                  cert.name,
+                  c.id as courseid,
+                  c.fullname,
+                  c.shortname,
+                  cm.id as cmid,
+                  'certificate' as module
+                FROM {certificate_issues} ci
+                INNER JOIN {certificate} cert ON cert.id = ci.certificateid
+                INNER JOIN {course} c ON c.id = cert.course
+                INNER JOIN {course_modules} cm ON cm.instance = cert.id AND cm.module = (
+                    SELECT id FROM {modules} WHERE name = 'certificate'
+                )
+                WHERE ci.userid = :userid";
+
+        $params = ['userid' => $this->user->id];
+
+        if ($this->courseid) {
+            $sql .= ' AND c.id = :courseid';
+            $params['courseid'] = $this->courseid;
+        }
+
+        $sql .= ' ORDER BY c.fullname, ci.timecreated';
+
+        $certificates = $DB->get_records_sql($sql, $params);
+
+        if (empty($certificates)) {
+            return [];
+        }
+
+        foreach ($certificates as $certificate) {
+            $url = new \moodle_url('/mod/certificate/view.php', [
+                'id' => $certificate->cmid,
+                'action' => 'get'
+            ]);
+
+            $certificate->downloadurl = $url->out(false);
+        }
+
+        return $certificates;
+    }
+
     /**
      * Get issued certificates from customcert module.
      *
@@ -148,7 +210,7 @@ class certificates {
      * @throws \moodle_exception
      */
     public function get_from_customcert() {
-        global $DB;
+        global $DB, $COURSE;
 
         $customcert = \core_plugin_manager::instance()->get_plugin_info('mod_customcert');
 
@@ -170,7 +232,7 @@ class certificates {
 
         $params = ['userid' => $this->user->id];
 
-        if ($this->courseid) {
+        if ($this->courseid) { //  && $COURSE->id != SITEID
             $sql .= ' AND c.id = :courseid';
             $params['courseid'] = $this->courseid;
         }
@@ -260,9 +322,23 @@ class certificates {
      * @return array
      */
     public static function group_certificates_by_course($certificates) {
+        global $DB;
+        
         $returndata = [];
+        $coursecache = [];
 
         foreach ($certificates as $certificate) {
+            // Check if course is visible/active (cache the results to avoid repeated DB queries)
+            if (!isset($coursecache[$certificate->courseid])) {
+                $course = $DB->get_record('course', ['id' => $certificate->courseid], 'visible');
+                $coursecache[$certificate->courseid] = $course && $course->visible;
+            }
+            
+            // Skip certificates from hidden/inactive courses
+            if (!$coursecache[$certificate->courseid]) {
+                continue;
+            }
+            
             $certs = [$certificate];
             if (isset($returndata[$certificate->courseid])) {
                 $certs = array_merge($certs, $returndata[$certificate->courseid]['certificates']);

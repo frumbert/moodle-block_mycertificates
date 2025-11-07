@@ -51,6 +51,10 @@ class renderer extends plugin_renderer_base {
             return parent::render_from_template('block_mycertificates/course', $data);
         }
 
+        if ($this->page->pagetype == 'my-index') { // TIM
+            return parent::render_from_template('block_mycertificates/mycourses', $data);
+        }
+
         return parent::render_from_template('block_mycertificates/mydashboard', $data);
     }
 }
